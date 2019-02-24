@@ -2,8 +2,9 @@
 from __future__ import unicode_literals
 
 import attr
+from typing import Optional
 from ._core import Enum
-from ._thread import ThreadType, Thread
+from ._thread import ThreadType, ThreadColor, Thread
 
 
 class TypingStatus(Enum):
@@ -18,25 +19,25 @@ class User(Thread):
     """Represents a Facebook user. Inherits `Thread`"""
 
     #: The profile url
-    url = attr.ib(None)
+    url = attr.ib(None, type=Optional[str])
     #: The users first name
-    first_name = attr.ib(None)
+    first_name = attr.ib(None, type=Optional[str])
     #: The users last name
-    last_name = attr.ib(None)
+    last_name = attr.ib(None, type=Optional[str])
     #: Whether the user and the client are friends
-    is_friend = attr.ib(None)
+    is_friend = attr.ib(None, type=Optional[bool])
     #: The user's gender
-    gender = attr.ib(None)
+    gender = attr.ib(None, type=Optional[str])
     #: From 0 to 1. How close the client is to the user
-    affinity = attr.ib(None)
+    affinity = attr.ib(None, type=Optional[float])
     #: The user's nickname
-    nickname = attr.ib(None)
+    nickname = attr.ib(None, type=Optional[str])
     #: The clients nickname, as seen by the user
-    own_nickname = attr.ib(None)
+    own_nickname = attr.ib(None, type=Optional[str])
     #: A :class:`ThreadColor`. The message color
-    color = attr.ib(None)
+    color = attr.ib(None, type=Optional[ThreadColor])
     #: The default emoji
-    emoji = attr.ib(None)
+    emoji = attr.ib(None, type=Optional[str])
 
     def __init__(
         self,
@@ -69,8 +70,8 @@ class User(Thread):
 @attr.s(cmp=False)
 class ActiveStatus(object):
     #: Whether the user is active now
-    active = attr.ib(None)
+    active = attr.ib(None, type=Optional[bool])
     #: Timestamp when the user was last active
-    last_active = attr.ib(None)
+    last_active = attr.ib(None, type=Optional[int])
     #: Whether the user is playing Messenger game now
-    in_game = attr.ib(None)
+    in_game = attr.ib(None, type=Optional[bool])

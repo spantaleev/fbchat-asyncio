@@ -2,7 +2,9 @@
 from __future__ import unicode_literals
 
 import attr
+from typing import Optional
 from ._core import Enum
+from . import _plan
 
 
 class ThreadType(Enum):
@@ -48,19 +50,19 @@ class Thread(object):
     """Represents a Facebook thread"""
 
     #: The unique identifier of the thread. Can be used a `thread_id`. See :ref:`intro_threads` for more info
-    uid = attr.ib(converter=str)
+    uid = attr.ib(type=str, converter=str)
     #: Specifies the type of thread. Can be used a `thread_type`. See :ref:`intro_threads` for more info
-    type = attr.ib()
+    type = attr.ib(type=ThreadType)
     #: A url to the thread's picture
-    photo = attr.ib(None)
+    photo = attr.ib(None, type=Optional[str])
     #: The name of the thread
-    name = attr.ib(None)
+    name = attr.ib(None, type=Optional[str])
     #: Timestamp of last message
-    last_message_timestamp = attr.ib(None)
+    last_message_timestamp = attr.ib(None, type=Optional[int])
     #: Number of messages in the thread
-    message_count = attr.ib(None)
+    message_count = attr.ib(None, type=Optional[int])
     #: Set :class:`Plan`
-    plan = attr.ib(None)
+    plan = attr.ib(None, type=Optional["_plan.Plan"])
 
     def __init__(
         self,

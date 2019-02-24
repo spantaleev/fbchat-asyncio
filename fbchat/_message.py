@@ -3,7 +3,9 @@ from __future__ import unicode_literals
 
 import attr
 from string import Formatter
+from typing import List, Dict, Optional
 from ._core import Enum
+from . import _attachment, _sticker, _quick_reply
 
 
 class EmojiSize(Enum):
@@ -31,11 +33,11 @@ class Mention(object):
     """Represents a @mention"""
 
     #: The thread ID the mention is pointing at
-    thread_id = attr.ib()
+    thread_id = attr.ib(type=str)
     #: The character where the mention starts
-    offset = attr.ib(0)
+    offset = attr.ib(0, type=int)
     #: The length of the mention
-    length = attr.ib(10)
+    length = attr.ib(10, type=int)
 
 
 @attr.s(cmp=False)
@@ -43,31 +45,41 @@ class Message(object):
     """Represents a Facebook message"""
 
     #: The actual message
-    text = attr.ib(None)
+    text = attr.ib(None, type=Optional[str])
     #: A list of :class:`Mention` objects
-    mentions = attr.ib(factory=list, converter=lambda x: [] if x is None else x)
+    mentions = attr.ib(
+        factory=list, type=List[Mention], converter=lambda x: [] if x is None else x
+    )
     #: A :class:`EmojiSize`. Size of a sent emoji
-    emoji_size = attr.ib(None)
+    emoji_size = attr.ib(None, type=Optional[EmojiSize])
     #: The message ID
-    uid = attr.ib(None, init=False)
+    uid = attr.ib(None, type=Optional[str], init=False)
     #: ID of the sender
-    author = attr.ib(None, init=False)
+    author = attr.ib(None, type=Optional[str], init=False)
     #: Timestamp of when the message was sent
-    timestamp = attr.ib(None, init=False)
+    timestamp = attr.ib(None, type=Optional[int], init=False)
     #: Whether the message is read
-    is_read = attr.ib(None, init=False)
+    is_read = attr.ib(None, type=Optional[bool], init=False)
     #: A list of pepole IDs who read the message, works only with :func:`fbchat.Client.fetchThreadMessages`
-    read_by = attr.ib(factory=list, init=False)
+    read_by = attr.ib(factory=list, type=List[str], init=False)
     #: A dict with user's IDs as keys, and their :class:`MessageReaction` as values
-    reactions = attr.ib(factory=dict, init=False)
+    reactions = attr.ib(factory=dict, type=Dict[str, MessageReaction], init=False)
     #: A :class:`Sticker`
-    sticker = attr.ib(None)
+    sticker = attr.ib(None, type=Optional["_sticker.Sticker"])
     #: A list of attachments
-    attachments = attr.ib(factory=list, converter=lambda x: [] if x is None else x)
+    attachments = attr.ib(
+        factory=list,
+        type=List["_attachment.Attachment"],
+        converter=lambda x: [] if x is None else x,
+    )
     #: A list of :class:`QuickReply`
-    quick_replies = attr.ib(factory=list, converter=lambda x: [] if x is None else x)
+    quick_replies = attr.ib(
+        factory=list,
+        type=List["_quick_reply.QuickReply"],
+        converter=lambda x: [] if x is None else x,
+    )
     #: Whether the message is unsent (deleted for everyone)
-    unsent = attr.ib(False, init=False)
+    unsent = attr.ib(False, type=bool, init=False)
 
     @classmethod
     def formatMentions(cls, text, *args, **kwargs):

@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import attr
+from typing import Optional
 from ._attachment import Attachment
 
 
@@ -10,16 +11,16 @@ class FileAttachment(Attachment):
     """Represents a file that has been sent as a Facebook attachment"""
 
     #: Url where you can download the file
-    url = attr.ib(None)
+    url = attr.ib(None, type=Optional[str])
     #: Size of the file in bytes
-    size = attr.ib(None)
+    size = attr.ib(None, type=Optional[int])
     #: Name of the file
-    name = attr.ib(None)
+    name = attr.ib(None, type=Optional[str])
     #: Whether Facebook determines that this file may be harmful
-    is_malicious = attr.ib(None)
+    is_malicious = attr.ib(None, type=Optional[bool])
 
     # Put here for backwards compatibility, so that the init argument order is preserved
-    uid = attr.ib(None)
+    uid = attr.ib(None, type=Optional[str])
 
 
 @attr.s(cmp=False)
@@ -27,16 +28,16 @@ class AudioAttachment(Attachment):
     """Represents an audio file that has been sent as a Facebook attachment"""
 
     #: Name of the file
-    filename = attr.ib(None)
+    filename = attr.ib(None, type=Optional[str])
     #: Url of the audio file
-    url = attr.ib(None)
+    url = attr.ib(None, type=Optional[str])
     #: Duration of the audioclip in milliseconds
-    duration = attr.ib(None)
+    duration = attr.ib(None, type=Optional[int])
     #: Audio type
-    audio_type = attr.ib(None)
+    audio_type = attr.ib(None, type=Optional[str])
 
     # Put here for backwards compatibility, so that the init argument order is preserved
-    uid = attr.ib(None)
+    uid = attr.ib(None, type=Optional[str])
 
 
 @attr.s(cmp=False, init=False)
@@ -48,38 +49,42 @@ class ImageAttachment(Attachment):
     """
 
     #: The extension of the original image (eg. 'png')
-    original_extension = attr.ib(None)
+    original_extension = attr.ib(None, type=Optional[str])
     #: Width of original image
-    width = attr.ib(None, converter=lambda x: None if x is None else int(x))
+    width = attr.ib(
+        None, type=Optional[int], converter=lambda x: None if x is None else int(x)
+    )
     #: Height of original image
-    height = attr.ib(None, converter=lambda x: None if x is None else int(x))
+    height = attr.ib(
+        None, type=Optional[int], converter=lambda x: None if x is None else int(x)
+    )
 
     #: Whether the image is animated
-    is_animated = attr.ib(None)
+    is_animated = attr.ib(None, type=Optional[bool])
 
     #: URL to a thumbnail of the image
-    thumbnail_url = attr.ib(None)
+    thumbnail_url = attr.ib(None, type=Optional[str])
 
     #: URL to a medium preview of the image
-    preview_url = attr.ib(None)
+    preview_url = attr.ib(None, type=Optional[str])
     #: Width of the medium preview image
-    preview_width = attr.ib(None)
+    preview_width = attr.ib(None, type=Optional[int])
     #: Height of the medium preview image
-    preview_height = attr.ib(None)
+    preview_height = attr.ib(None, type=Optional[int])
 
     #: URL to a large preview of the image
-    large_preview_url = attr.ib(None)
+    large_preview_url = attr.ib(None, type=Optional[str])
     #: Width of the large preview image
-    large_preview_width = attr.ib(None)
+    large_preview_width = attr.ib(None, type=Optional[int])
     #: Height of the large preview image
-    large_preview_height = attr.ib(None)
+    large_preview_height = attr.ib(None, type=Optional[int])
 
     #: URL to an animated preview of the image (eg. for gifs)
-    animated_preview_url = attr.ib(None)
+    animated_preview_url = attr.ib(None, type=Optional[str])
     #: Width of the animated preview image
-    animated_preview_width = attr.ib(None)
+    animated_preview_width = attr.ib(None, type=Optional[int])
     #: Height of the animated preview image
-    animated_preview_height = attr.ib(None)
+    animated_preview_height = attr.ib(None, type=Optional[int])
 
     def __init__(
         self,
@@ -128,36 +133,36 @@ class VideoAttachment(Attachment):
     """Represents a video that has been sent as a Facebook attachment"""
 
     #: Size of the original video in bytes
-    size = attr.ib(None)
+    size = attr.ib(None, type=Optional[int])
     #: Width of original video
-    width = attr.ib(None)
+    width = attr.ib(None, type=Optional[int])
     #: Height of original video
-    height = attr.ib(None)
+    height = attr.ib(None, type=Optional[int])
     #: Length of video in milliseconds
-    duration = attr.ib(None)
+    duration = attr.ib(None, type=Optional[int])
     #: URL to very compressed preview video
-    preview_url = attr.ib(None)
+    preview_url = attr.ib(None, type=Optional[str])
 
     #: URL to a small preview image of the video
-    small_image_url = attr.ib(None)
+    small_image_url = attr.ib(None, type=Optional[str])
     #: Width of the small preview image
-    small_image_width = attr.ib(None)
+    small_image_width = attr.ib(None, type=Optional[int])
     #: Height of the small preview image
-    small_image_height = attr.ib(None)
+    small_image_height = attr.ib(None, type=Optional[int])
 
     #: URL to a medium preview image of the video
-    medium_image_url = attr.ib(None)
+    medium_image_url = attr.ib(None, type=Optional[str])
     #: Width of the medium preview image
-    medium_image_width = attr.ib(None)
+    medium_image_width = attr.ib(None, type=Optional[int])
     #: Height of the medium preview image
-    medium_image_height = attr.ib(None)
+    medium_image_height = attr.ib(None, type=Optional[int])
 
     #: URL to a large preview image of the video
-    large_image_url = attr.ib(None)
+    large_image_url = attr.ib(None, type=Optional[str])
     #: Width of the large preview image
-    large_image_width = attr.ib(None)
+    large_image_width = attr.ib(None, type=Optional[int])
     #: Height of the large preview image
-    large_image_height = attr.ib(None)
+    large_image_height = attr.ib(None, type=Optional[int])
 
     def __init__(
         self,

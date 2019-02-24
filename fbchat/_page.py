@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import attr
+from typing import Optional
 from ._thread import ThreadType, Thread
 
 
@@ -10,15 +11,15 @@ class Page(Thread):
     """Represents a Facebook page. Inherits `Thread`"""
 
     #: The page's custom url
-    url = attr.ib(None)
+    url = attr.ib(None, type=Optional[str])
     #: The name of the page's location city
-    city = attr.ib(None)
+    city = attr.ib(None, type=Optional[str])
     #: Amount of likes the page has
-    likes = attr.ib(None)
+    likes = attr.ib(None, type=Optional[int])
     #: Some extra information about the page
-    sub_title = attr.ib(None)
+    sub_title = attr.ib(None, type=Optional[str])
     #: The page's category
-    category = attr.ib(None)
+    category = attr.ib(None, type=Optional[str])
 
     def __init__(
         self,

@@ -2,7 +2,8 @@
 from __future__ import unicode_literals
 
 import attr
-from ._thread import ThreadType, Thread
+from typing import Set, Dict, Optional
+from ._thread import ThreadType, ThreadColor, Thread
 
 
 @attr.s(cmp=False, init=False)
@@ -10,23 +11,29 @@ class Group(Thread):
     """Represents a Facebook group. Inherits `Thread`"""
 
     #: Unique list (set) of the group thread's participant user IDs
-    participants = attr.ib(factory=set, converter=lambda x: set() if x is None else x)
+    participants = attr.ib(
+        factory=set, type=Set[str], converter=lambda x: set() if x is None else x
+    )
     #: A dict, containing user nicknames mapped to their IDs
-    nicknames = attr.ib(factory=dict, converter=lambda x: {} if x is None else x)
+    nicknames = attr.ib(
+        factory=dict, type=Dict[str, str], converter=lambda x: {} if x is None else x
+    )
     #: A :class:`ThreadColor`. The groups's message color
-    color = attr.ib(None)
+    color = attr.ib(None, type=Optional[ThreadColor])
     #: The groups's default emoji
-    emoji = attr.ib(None)
+    emoji = attr.ib(None, type=Optional[str])
     # Set containing user IDs of thread admins
-    admins = attr.ib(factory=set, converter=lambda x: set() if x is None else x)
+    admins = attr.ib(
+        factory=set, type=Set[str], converter=lambda x: set() if x is None else x
+    )
     # True if users need approval to join
-    approval_mode = attr.ib(None)
+    approval_mode = attr.ib(None, type=Optional[bool])
     # Set containing user IDs requesting to join
     approval_requests = attr.ib(
-        factory=set, converter=lambda x: set() if x is None else x
+        factory=set, type=Set[str], converter=lambda x: set() if x is None else x
     )
     # Link for joining group
-    join_link = attr.ib(None)
+    join_link = attr.ib(None, type=Optional[str])
 
     def __init__(
         self,
@@ -66,7 +73,7 @@ class Room(Group):
     """Deprecated. Use :class:`Group` instead"""
 
     # True is room is not discoverable
-    privacy_mode = attr.ib(None)
+    privacy_mode = attr.ib(None, type=Optional[bool])
 
     def __init__(self, uid, privacy_mode=None, **kwargs):
         super(Room, self).__init__(uid, **kwargs)
