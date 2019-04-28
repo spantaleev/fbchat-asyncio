@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from __future__ import unicode_literals
 
+from typing import Union, Dict, List, Optional
 from random import choice
 from bs4 import BeautifulSoup as bs
 from collections import OrderedDict
@@ -8,12 +9,16 @@ from ._util import *
 from .models import *
 from ._graphql import graphql_queries_to_json, graphql_response_to_json, GraphQL
 from yarl import URL
+import logging
 import asyncio
 import aiohttp
 import time
 import json
 import re
 
+
+log = logging.getLogger("fbchat.client")
+reqlog = log.getChild("request")
 
 ACONTEXT = {
     "action_history": [
@@ -30,8 +35,6 @@ class Client(object):
 
     ssl_verify = True
     """Verify ssl certificate, set to False to allow debugging with a proxy"""
-    listening = False
-    """Whether the client is listening. Used when creating an external event loop to determine when to stop listening"""
 
     @property
     def uid(self):
@@ -45,15 +48,17 @@ class Client(object):
         self,
         user_agent=None,
         logging_level=logging.INFO,
+        loop=None,
     ):
         """Initializes and logs in the client
 
         :param user_agent: Custom user agent to use when sending requests. If `None`, user agent will be chosen from a premade list (see :any:`utils.USER_AGENTS`)
         :param logging_level: Configures the `logging level <https://docs.python.org/3/library/logging.html#logging-levels>`_. Defaults to `INFO`
+        :param loop: The asyncio event loop to use.
         :type logging_level: int
         """
         self._sticky, self._pool = (None, None)
-        self._session = None
+        self._session = aiohttp.ClientSession(loop=loop)
         self._req_counter = 1
         self._seq = "0"
         # See `createPoll` for the reason for using `OrderedDict` here
@@ -63,6 +68,8 @@ class Client(object):
         self.req_url = ReqUrl()
         self._markAlive = True
         self._buddylist = dict()
+        self.loop = loop or asyncio.get_event_loop()
+        self._listening: Optional[asyncio.Future] = None
 
         if not user_agent:
             user_agent = choice(USER_AGENTS)
@@ -77,7 +84,7 @@ class Client(object):
 
         handler.setLevel(logging_level)
 
-    async def start(self, email, password, max_tries=5, session_cookies=None):
+    async def start(self, email, password, max_tries=5, session_cookies=None, login: bool = True):
         """
         :param email: Facebook `email`, `id` or `phone number`
         :param password: Facebook account password
@@ -87,13 +94,13 @@ class Client(object):
         :type session_cookies: dict
         :raises: FBchatException on failed login
         """
-        self._session = aiohttp.ClientSession()
         if (
             not session_cookies
             or not await self.setSession(session_cookies)
             or not self.isLoggedIn()
         ):
-            await self.login(email, password, max_tries)
+            if login:
+                await self.login(email, password, max_tries)
 
     """
     INTERNAL REQUEST METHODS
@@ -109,7 +116,7 @@ class Client(object):
         payload["__req"] = str_base(self._req_counter, 36)
         payload["seq"] = self._seq
         self._req_counter += 1
-        return payload
+        return {key: value for key, value in payload.items() if value is not None}
 
     def _fix_fb_errors(self, error_code):
         """
@@ -131,8 +138,9 @@ class Client(object):
         fix_request=False,
         as_json=False,
         error_retries=3,
-    ):
+    ) -> Union[aiohttp.ClientResponse, Dict]:
         payload = self._generatePayload(query)
+        reqlog.debug(f"GET {url}")
         r = await self._session.get(
             url,
             headers=self._header,
@@ -154,7 +162,7 @@ class Client(object):
                     as_json=as_json,
                     error_retries=error_retries - 1,
                 )
-            raise e
+            raise
 
     async def _post(
         self,
@@ -167,6 +175,7 @@ class Client(object):
         error_retries=3,
     ):
         payload = self._generatePayload(query)
+        reqlog.debug(f"POST {url}")
         r = await self._session.post(
             url,
             headers=self._header,
@@ -193,9 +202,10 @@ class Client(object):
                     as_graphql=as_graphql,
                     error_retries=error_retries - 1,
                 )
-            raise e
+            raise
 
     async def _cleanGet(self, url, query=None, timeout=30, allow_redirects=True) -> aiohttp.ClientResponse:
+        reqlog.debug(f"GET {url}")
         return await self._session.get(
             url,
             headers=self._header,
@@ -207,6 +217,7 @@ class Client(object):
 
     async def _cleanPost(self, url, query=None, timeout=30) -> aiohttp.ClientResponse:
         self._req_counter += 1
+        reqlog.debug(f"POST {url}")
         return await self._session.post(
             url,
             headers=self._header,
@@ -298,7 +309,7 @@ class Client(object):
 
     def _resetValues(self):
         self._payload_default = OrderedDict()
-        self._session = aiohttp.ClientSession()
+        self._session = aiohttp.ClientSession(loop=self.loop)
         self._req_counter = 1
         self._seq = "0"
         self._uid = None
@@ -353,7 +364,7 @@ class Client(object):
 
         # Usually, 'Checkpoint' will refer to 2FA
         if "checkpoint" in str(r.url) and ('id="approvals_code"' in (await r.text()).lower()):
-            r = self._2FA(r)
+            r = await self._2FA(r)
 
         # Sometimes Facebook tries to show the user a "Save Device" dialog
         if "save-device" in str(r.url):
@@ -369,7 +380,7 @@ class Client(object):
         soup = bs(await r.text(), "html.parser")
         data = dict()
 
-        s = self.on2FACode()
+        s = await self.on2FACode()
 
         data["approvals_code"] = s
         data["fb_dtsg"] = soup.find("input", {"name": "fb_dtsg"})["value"]
@@ -442,7 +453,7 @@ class Client(object):
         :return: A dictionay containing session cookies
         :rtype: dict
         """
-        return self._session.cookie_jar.filter_cookies(ReqUrl.LOGIN)
+        return self._session.cookie_jar._cookies["facebook.com"]
 
     async def setSession(self, session_cookies):
         """Loads session cookies
@@ -460,7 +471,7 @@ class Client(object):
             # Load cookies into current session
             self._session.cookie_jar.update_cookies(session_cookies)
             await self._postLogin()
-        except Exception as e:
+        except Exception:
             log.exception("Failed loading session")
             self._resetValues()
             return False
@@ -627,7 +638,7 @@ class Client(object):
 
         return threads
 
-    async def fetchAllUsersFromThreads(self, threads):
+    async def fetchAllUsersFromThreads(self, threads) -> List[User]:
         """
         Get all users involved in threads.
 
@@ -874,7 +885,7 @@ class Client(object):
         log.debug(entries)
         return entries
 
-    async def fetchUserInfo(self, *user_ids):
+    async def fetchUserInfo(self, *user_ids) -> Dict[str, User]:
         """
         Get users' info from IDs, unordered
 
@@ -937,7 +948,7 @@ class Client(object):
 
         return groups
 
-    async def fetchThreadInfo(self, *thread_ids):
+    async def fetchThreadInfo(self, *thread_ids) -> Dict[str, Union[Group, User, Page]]:
         """
         Get threads' info from IDs, unordered
 
@@ -1580,7 +1591,7 @@ class Client(object):
         :raises: FBchatException if request failed
         """
         file_urls = require_list(file_urls)
-        files = await self._upload(await get_files_from_urls(file_urls))
+        files = await self._upload(await get_files_from_urls(file_urls, loop=self.loop))
         return await self._sendFiles(
             files=files, message=message, thread_id=thread_id, thread_type=thread_type
         )
@@ -1621,7 +1632,7 @@ class Client(object):
         :raises: FBchatException if request failed
         """
         clip_urls = require_list(clip_urls)
-        files = await self._upload(await get_files_from_urls(clip_urls), voice_clip=True)
+        files = await self._upload(await get_files_from_urls(clip_urls, loop=self.loop), voice_clip=True)
         return await self._sendFiles(
             files=files, message=message, thread_id=thread_id, thread_type=thread_type
         )
@@ -1883,7 +1894,7 @@ class Client(object):
         :param thread_id: User/Group ID to change image. See :ref:`intro_threads`
         :raises: FBchatException if request failed
         """
-        (image_id, mimetype), = await self._upload(await get_files_from_urls([image_url]))
+        (image_id, mimetype), = await self._upload(await get_files_from_urls([image_url], loop=self.loop))
         return await self._changeGroupImage(image_id, thread_id)
 
     async def changeGroupImageLocal(self, image_path, thread_id=None):
@@ -1968,7 +1979,7 @@ class Client(object):
 
         Trivia: While changing the emoji, the Facebook web client actually sends multiple different requests, though only this one is required to make the change
 
-        :param color: New thread emoji
+        :param emoji: New thread emoji
         :param thread_id: User/Group ID to change emoji of. See :ref:`intro_threads`
         :raises: FBchatException if request failed
         """
@@ -2277,6 +2288,7 @@ class Client(object):
             r_archive, r_unpin = await asyncio.gather(
                 self._post(self.req_url.ARCHIVED_STATUS, data_archive),
                 self._post(self.req_url.PINNED_STATUS, data_unpin),
+                loop=self.loop,
             )
             return 200 <= r_archive.status < 300 and 200 <= r_unpin.status < 300
         else:
@@ -2304,6 +2316,7 @@ class Client(object):
         r_unpin, r_delete = await asyncio.gather(
             self._post(self.req_url.PINNED_STATUS, data_unpin),
             self._post(self.req_url.DELETE_THREAD, data_delete),
+            loop=self.loop,
         )
         return 200 <= r_unpin.status < 300 and 200 <= r_delete.status < 300
 
@@ -2418,7 +2431,7 @@ class Client(object):
             "clientid": self._client_id,
             "state": "active" if self._markAlive else "offline",
         }
-        return await self._get(self.req_url.STICKY, data, fix_request=True, as_json=True)
+        return await self._get(self.req_url.STICKY, data, timeout=120, fix_request=True, as_json=True)
 
     async def _parseDelta(self, m):
         def getThreadIdAndThreadType(msg_metadata):
@@ -2966,6 +2979,12 @@ class Client(object):
         else:
             await self.onUnknownMesssageType(msg=m)
 
+    async def _tryParseMessage(self, m) -> None:
+        try:
+            await self._parseMessage(m)
+        except Exception:
+            log.exception("Error in parseMessage")
+
     async def _parseMessage(self, content):
         """Get message and author name from content. May contain multiple messages in the content."""
         self._seq = content.get("seq", "0")
@@ -3068,14 +3087,6 @@ class Client(object):
             except Exception as e:
                 await self.onMessageError(exception=e, msg=m)
 
-    def startListening(self):
-        """
-        Start listening from an external event loop
-
-        :raises: FBchatException if request failed
-        """
-        self.listening = True
-
     async def doOneListen(self, markAlive=None):
         """
         Does one cycle of the listening loop.
@@ -3091,52 +3102,64 @@ class Client(object):
         if markAlive is not None:
             self._markAlive = markAlive
         try:
-            if self._markAlive:
+            if self._markAlive and self._sticky and self._pool:
+                log.debug("Pinging...")
                 await self._ping()
+            log.debug("Pulling messages...")
             content = await self._pullMessage()
             if content:
-                await self._parseMessage(content)
-        except KeyboardInterrupt:
-            return False
+                asyncio.ensure_future(self._tryParseMessage(content), loop=self.loop)
         except aiohttp.ServerTimeoutError:
             pass
         except aiohttp.ClientConnectionError:
+            log.exception("Client connection error")
             # If the client has lost their internet connection, keep trying every 30 seconds
             time.sleep(30)
         except FBchatFacebookError as e:
             # Fix 502 and 503 pull errors
             if e.request_status_code in [502, 503]:
                 self.req_url.change_pull_channel()
-                self.startListening()
             else:
-                raise e
+                raise
         except Exception as e:
             return await self.onListenError(exception=e)
 
         return True
 
+    @property
+    def listening(self) -> bool:
+        return self._listening is not None and not self._listening.done()
+
     def stopListening(self):
         """Cleans up the variables from startListening"""
-        self.listening = False
+        self._listening.cancel()
         self._sticky, self._pool = (None, None)
 
-    async def listen(self, markAlive=None):
+    def listen(self, markAlive=None):
         """
         Initializes and runs the listening loop continually
 
         :param markAlive: Whether this should ping the Facebook server each time the loop runs
         :type markAlive: bool
         """
-        if markAlive is not None:
-            self.setActiveStatus(markAlive)
+        if self.listening:
+            return False
+        self._listening = asyncio.ensure_future(self._listen(markAlive), loop=self.loop)
+        return True
 
-        self.startListening()
-        self.onListening()
+    async def _listen(self, markAlive=None):
+        try:
+            if markAlive is not None:
+                self.setActiveStatus(markAlive)
 
-        while self.listening and await self.doOneListen():
-            pass
+            await self.onListening()
 
-        self.stopListening()
+            while await self.doOneListen():
+                pass
+        except Exception:
+            log.exception("Fatal error in listener")
+
+        self._listening = self._sticky = self._pool = None
 
     def setActiveStatus(self, markAlive):
         """

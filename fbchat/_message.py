@@ -91,7 +91,7 @@ class Message(object):
     #: Replied message
     replied_to = attr.ib(None, init=False)
     #: Whether the message was forwarded
-    forwarded = attr.ib(False, init=False)
+    forwarded = attr.ib(False, init=True)
 
     @classmethod
     def formatMentions(cls, text, *args, **kwargs):

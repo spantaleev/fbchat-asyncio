@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 import logging
 import aenum
 
-log = logging.getLogger("client")
+log = logging.getLogger("fbchat.core")
 
 
 class Enum(aenum.Enum):

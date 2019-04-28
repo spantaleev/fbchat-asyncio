@@ -8,13 +8,14 @@ from mimetypes import guess_type
 from os.path import basename
 import json
 import logging
+import asyncio
 from ._exception import FBchatException, FBchatFacebookError
 
 from yarl import URL
 import aiohttp
 
 # Log settings
-log = logging.getLogger("client")
+log = logging.getLogger("fbchat.util")
 log.setLevel(logging.DEBUG)
 # Creates the console handler
 handler = logging.StreamHandler()
@@ -122,25 +123,13 @@ def now():
 
 def strip_to_json(text):
     try:
-        return text[text.index("{"):]
+        return text[text.index(b"{" if isinstance(text, bytes) else "{"):]
     except ValueError:
         raise FBchatException("No JSON object found: {!r}".format(text))
 
 
-def get_decoded_r(r):
-    return get_decoded(r._content)
-
-
-def get_decoded(content):
-    return content.decode(facebookEncoding)
-
-
 def parse_json(content):
     return json.loads(content)
-
-
-def get_json(r):
-    return json.loads(strip_to_json(get_decoded_r(r)))
 
 
 def digitToChar(digit):
@@ -264,9 +253,9 @@ def mimetype_to_key(mimetype):
     return "file_id"
 
 
-async def get_files_from_urls(file_urls):
+async def get_files_from_urls(file_urls, loop=None):
     files = []
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(loop=loop or asyncio.get_event_loop()) as session:
         for file_url in file_urls:
             async with session.get(file_url) as resp:
                 # We could possibly use r.headers.get('Content-Disposition'), see
