@@ -318,10 +318,12 @@ class Client(object):
     async def _postLogin(self):
         self._payload_default = OrderedDict()
         self._client_id = hex(int(random() * 2147483648))[2:]
-        self._uid = self._session.cookie_jar.filter_cookies(ReqUrl.LOGIN).get("c_user")
+        try:
+            self._uid = self._session.cookie_jar.filter_cookies(ReqUrl.LOGIN).get("c_user").value
+        except (TypeError, AttributeError, KeyError):
+            raise FBchatException("Could not find c_user cookie")
         if self._uid is None:
             raise FBchatException("Could not find c_user cookie")
-        self._uid = str(self._uid)
 
         r = await self._get(self.req_url.BASE)
         text = await r.text()
