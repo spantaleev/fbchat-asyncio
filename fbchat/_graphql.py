@@ -37,7 +37,7 @@ def graphql_queries_to_json(*queries):
     return json.dumps(rtn)
 
 
-def graphql_response_to_json(content):
+def graphql_response_to_json(content, log=None):
     content = _util.strip_to_json(content)  # Usually only needed in some error cases
     try:
         j = json.loads(content, cls=ConcatJSONDecoder)
@@ -57,7 +57,8 @@ def graphql_response_to_json(content):
         else:
             rtn[int(key[1:])] = value["data"]
 
-    _util.log.debug(rtn)
+    if log:
+        log.debug(rtn)
 
     return rtn
 

@@ -7,19 +7,11 @@ from contextlib import contextmanager
 from mimetypes import guess_type
 from os.path import basename
 import json
-import logging
 import asyncio
 from ._exception import FBchatException, FBchatFacebookError
 
 from yarl import URL
 import aiohttp
-
-# Log settings
-log = logging.getLogger("fbchat.util")
-log.setLevel(logging.DEBUG)
-# Creates the console handler
-handler = logging.StreamHandler()
-log.addHandler(handler)
 
 #: Default list of user agents
 USER_AGENTS = [
@@ -197,7 +189,7 @@ def check_json(j):
             )
 
 
-async def check_request(r: aiohttp.ClientResponse, as_json: bool = True):
+async def check_request(r: aiohttp.ClientResponse, as_json: bool = True, log=None):
     if not 200 <= r.status < 300:
         raise FBchatFacebookError(
             "Error when sending request: Got {} response".format(r.status),
@@ -216,22 +208,24 @@ async def check_request(r: aiohttp.ClientResponse, as_json: bool = True):
         except ValueError:
             raise FBchatFacebookError("Error while parsing JSON: {!r}".format(content))
         check_json(j)
-        log.debug(j)
+        if log:
+            log.debug(j)
         return j
     else:
         return content
 
 
-def get_jsmods_require(j, index):
+def get_jsmods_require(j, index, log=None):
     if j.get("jsmods") and j["jsmods"].get("require"):
         try:
             return j["jsmods"]["require"][0][index][0]
         except (KeyError, IndexError) as e:
-            log.warning(
-                "Error when getting jsmods_require: {}. Facebook might have changed protocol".format(
-                    j
+            if log:
+                log.warning(
+                    "Error when getting jsmods_require: {}. Facebook might have changed protocol".format(
+                        j
+                    )
                 )
-            )
     return None
 
 

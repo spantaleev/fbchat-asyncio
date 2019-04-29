@@ -262,7 +262,7 @@ class Message(object):
         return rtn
 
     @classmethod
-    def _from_pull(cls, data, mid=None, tags=None, author=None, timestamp=None):
+    def _from_pull(cls, data, mid=None, tags=None, author=None, timestamp=None, log=None):
         rtn = cls(text=data.get("body"))
         rtn.uid = mid
         rtn.author = author
@@ -279,7 +279,8 @@ class Message(object):
                     for mention in _util.parse_json(data["data"]["prng"])
                 ]
             except Exception:
-                _util.log.exception("An exception occured while reading attachments")
+                if log:
+                    log.exception("An exception occured while reading attachments")
 
         if data.get("attachments"):
             try:
@@ -316,11 +317,12 @@ class Message(object):
                             rtn.attachments.append(attachment)
 
             except Exception:
-                _util.log.exception(
-                    "An exception occured while reading attachments: {}".format(
-                        data["attachments"]
+                if log:
+                    log.exception(
+                        "An exception occured while reading attachments: {}".format(
+                            data["attachments"]
+                        )
                     )
-                )
 
         rtn.emoji_size = EmojiSize._from_tags(tags)
         rtn.forwarded = cls._get_forwarded_from_tags(tags)

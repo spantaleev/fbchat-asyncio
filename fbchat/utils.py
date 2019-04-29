@@ -4,8 +4,6 @@ from __future__ import unicode_literals
 
 from .models import *
 from ._util import (
-    log,
-    handler,
     USER_AGENTS,
     ReqUrl,
     facebookEncoding,

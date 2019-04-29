@@ -17,9 +17,6 @@ import json
 import re
 
 
-log = logging.getLogger("fbchat.client")
-reqlog = log.getChild("request")
-
 ACONTEXT = {
     "action_history": [
         {"surface": "messenger_chat_tab", "mechanism": "messenger_composer"}
@@ -47,15 +44,12 @@ class Client(object):
     def __init__(
         self,
         user_agent=None,
-        logging_level=logging.INFO,
         loop=None,
     ):
         """Initializes and logs in the client
 
         :param user_agent: Custom user agent to use when sending requests. If `None`, user agent will be chosen from a premade list (see :any:`utils.USER_AGENTS`)
-        :param logging_level: Configures the `logging level <https://docs.python.org/3/library/logging.html#logging-levels>`_. Defaults to `INFO`
         :param loop: The asyncio event loop to use.
-        :type logging_level: int
         """
         self._sticky, self._pool = (None, None)
         self._session = aiohttp.ClientSession(loop=loop)
@@ -70,6 +64,9 @@ class Client(object):
         self._buddylist = dict()
         self.loop = loop or asyncio.get_event_loop()
         self._listening: Optional[asyncio.Future] = None
+        self._log = logging.getLogger("fbchat.client")
+        self._util_log = logging.getLogger("fbchat.util")
+        self._req_log = logging.getLogger("fbchat.request")
 
         if not user_agent:
             user_agent = choice(USER_AGENTS)
@@ -81,8 +78,6 @@ class Client(object):
             "User-Agent": user_agent,
             "Connection": "keep-alive",
         }
-
-        handler.setLevel(logging_level)
 
     async def start(self, email, password, max_tries=5, session_cookies=None, login: bool = True):
         """
@@ -125,7 +120,7 @@ class Client(object):
         It may be a bad idea to do this in an exception handler, if you have a better method, please suggest it!
         """
         if error_code == "1357004":
-            log.warning("Got error #1357004. Doing a _postLogin, and resending request")
+            self._log.warning("Got error #1357004. Doing a _postLogin, and resending request")
             self._postLogin()
             return True
         return False
@@ -141,7 +136,7 @@ class Client(object):
     ) -> Union[aiohttp.ClientResponse, Dict]:
         payload = self._generatePayload(query)
 
-        reqlog.debug(f"GET {url}?{URL().with_query(payload).query_string}")
+        self._req_log.debug(f"GET {url}?{URL().with_query(payload).query_string}")
         r = await self._session.get(
             url,
             headers=self._header,
@@ -152,7 +147,7 @@ class Client(object):
         if not fix_request:
             return r
         try:
-            return await check_request(r, as_json=as_json)
+            return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
             if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
                 return await self._get(
@@ -176,7 +171,7 @@ class Client(object):
         error_retries=3,
     ):
         payload = self._generatePayload(query)
-        reqlog.debug(f"POST {url} {payload}")
+        self._req_log.debug(f"POST {url} {payload}")
         r = await self._session.post(
             url,
             headers=self._header,
@@ -188,10 +183,10 @@ class Client(object):
             return r
         try:
             if as_graphql:
-                content = await check_request(r, as_json=False)
-                return graphql_response_to_json(content)
+                content = await check_request(r, as_json=False, log=self._util_log)
+                return graphql_response_to_json(content, log=self._util_log)
             else:
-                return await check_request(r, as_json=as_json)
+                return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
             if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
                 return await self._post(
@@ -206,7 +201,7 @@ class Client(object):
             raise
 
     async def _cleanGet(self, url, query=None, timeout=30, allow_redirects=True) -> aiohttp.ClientResponse:
-        reqlog.debug(f"GET {url}")
+        self._req_log.debug(f"GET {url}")
         return await self._session.get(
             url,
             headers=self._header,
@@ -218,7 +213,7 @@ class Client(object):
 
     async def _cleanPost(self, url, query=None, timeout=30) -> aiohttp.ClientResponse:
         self._req_counter += 1
-        reqlog.debug(f"POST {url} {query}")
+        self._req_log.debug(f"POST {url} {query}")
         return await self._session.post(
             url,
             headers=self._header,
@@ -260,7 +255,7 @@ class Client(object):
         if not fix_request:
             return r
         try:
-            return await check_request(r, as_json=as_json)
+            return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
             if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
                 return await self._postFile(
@@ -390,7 +385,7 @@ class Client(object):
         data["nh"] = soup.find("input", {"name": "nh"})["value"]
         data["submit[Submit Code]"] = "Submit Code"
         data["codes_submitted"] = 0
-        log.info("Submitting 2FA code.")
+        self._log.info("Submitting 2FA code.")
 
         r = await self._cleanPost(self.req_url.CHECKPOINT, data)
 
@@ -403,7 +398,7 @@ class Client(object):
 
         data["name_action_selected"] = "save_device"
         data["submit[Continue]"] = "Continue"
-        log.info(
+        self._log.info(
             "Saving browser."
         )  # At this stage, we have dtsg, nh, name_action_selected, submit[Continue]
         r = await self._cleanPost(self.req_url.CHECKPOINT, data)
@@ -412,7 +407,7 @@ class Client(object):
             return r
 
         del data["name_action_selected"]
-        log.info(
+        self._log.info(
             "Starting Facebook checkup flow."
         )  # At this stage, we have dtsg, nh, submit[Continue]
         r = await self._cleanPost(self.req_url.CHECKPOINT, data)
@@ -422,7 +417,7 @@ class Client(object):
 
         del data["submit[Continue]"]
         data["submit[This was me]"] = "This Was Me"
-        log.info(
+        self._log.info(
             "Verifying login attempt."
         )  # At this stage, we have dtsg, nh, submit[This was me]
         r = await self._cleanPost(self.req_url.CHECKPOINT, data)
@@ -433,7 +428,7 @@ class Client(object):
         del data["submit[This was me]"]
         data["submit[Continue]"] = "Continue"
         data["name_action_selected"] = "save_device"
-        log.info(
+        self._log.info(
             "Saving device again."
         )  # At this stage, we have dtsg, nh, submit[Continue], name_action_selected
         r = self._cleanPost(self.req_url.CHECKPOINT, data)
@@ -475,7 +470,7 @@ class Client(object):
             self._session.cookie_jar.update_cookies(session_cookies)
             await self._postLogin()
         except Exception:
-            log.exception("Failed loading session")
+            self._log.exception("Failed loading session")
             self._resetValues()
             return False
         return True
@@ -501,7 +496,7 @@ class Client(object):
         for i in range(1, max_tries + 1):
             login_successful, login_url = await self._login(email, password)
             if not login_successful:
-                log.warning(
+                self._log.warning(
                     "Attempt #{} failed{}".format(
                         i, {True: ", retrying"}.get(i < max_tries, "")
                     )
@@ -761,7 +756,7 @@ class Client(object):
                 # We don't handle Facebook "Groups"
                 pass
             else:
-                log.warning(
+                self._log.warning(
                     "Unknown type {} in {}".format(repr(node["__typename"]), node)
                 )
 
@@ -885,7 +880,7 @@ class Client(object):
                     "{} had an unknown thread type: {}".format(_id, k)
                 )
 
-        log.debug(entries)
+        self._log.debug(entries)
         return entries
 
     async def fetchUserInfo(self, *user_ids) -> Dict[str, User]:
@@ -1073,7 +1068,7 @@ class Client(object):
         :raises: FBchatException if request failed
         """
         if offset is not None:
-            log.warning(
+            self._log.warning(
                 "Using `offset` in `fetchThreadList` is no longer supported, "
                 "since Facebook migrated to the use of GraphQL in this request. "
                 "Use `before` instead."
@@ -1160,7 +1155,7 @@ class Client(object):
             ReqUrl.ATTACHMENT_PHOTO, query=data, fix_request=True, as_json=True
         )
 
-        url = get_jsmods_require(j, 3)
+        url = get_jsmods_require(j, 3, log=self._util_log)
         if url is None:
             raise FBchatException("Could not fetch image url from: {}".format(j))
         return url
@@ -1331,7 +1326,7 @@ class Client(object):
         j = await self._post(self.req_url.SEND, data, fix_request=True, as_json=True)
 
         # update JS token if received in response
-        fb_dtsg = get_jsmods_require(j, 2)
+        fb_dtsg = get_jsmods_require(j, 2, log=self._util_log)
         if fb_dtsg is not None:
             self._payload_default["fb_dtsg"] = fb_dtsg
 
@@ -1342,7 +1337,7 @@ class Client(object):
                 if "message_id" in action
             ]
             if len(message_ids) != 1:
-                log.warning("Got multiple message ids' back: {}".format(message_ids))
+                self._log.warning("Got multiple message ids' back: {}".format(message_ids))
             if get_thread_id:
                 return message_ids[0]
             else:
@@ -2238,10 +2233,10 @@ class Client(object):
         r = await self._post(self.req_url.REMOVE_FRIEND, payload)
         query = URL(r.url).query
         if "err" not in query:
-            log.debug("Remove was successful!")
+            self._log.debug("Remove was successful!")
             return True
         else:
-            log.warning("Error while removing friend")
+            self._log.warning("Error while removing friend")
             return False
 
     async def blockUser(self, user_id):
@@ -2969,7 +2964,7 @@ class Client(object):
                 author_id=author_id,
                 message=delta.get("body", ""),
                 message_object=Message._from_pull(
-                    delta, tags=metadata.get("tags"), author=author_id, timestamp=ts
+                    delta, tags=metadata.get("tags"), author=author_id, timestamp=ts, log=self._util_log,
                 ),
                 thread_id=thread_id,
                 thread_type=thread_type,
@@ -2996,7 +2991,7 @@ class Client(object):
 
             asyncio.ensure_future(self._parseMessage(content), loop=self.loop)
         except Exception:
-            log.exception("Error in parseMessage")
+            self._log.exception("Error in parseMessage")
 
     async def _parseMessage(self, content):
         """Get message and author name from content. May contain multiple messages in the content."""
@@ -3113,7 +3108,7 @@ class Client(object):
         except aiohttp.ServerTimeoutError:
             pass
         except aiohttp.ClientConnectionError:
-            log.exception("Client connection error")
+            self._log.exception("Client connection error")
             # If the client has lost their internet connection, keep trying every 30 seconds
             time.sleep(30)
         except FBchatFacebookError as e:
@@ -3158,7 +3153,7 @@ class Client(object):
             while await self.doOneListen():
                 pass
         except Exception:
-            log.exception("Fatal error in listener")
+            self._log.exception("Fatal error in listener")
 
         self._listening = self._sticky = self._pool = None
 
@@ -3185,7 +3180,7 @@ class Client(object):
 
         :param email: The email of the client
         """
-        log.info("Logging in {}...".format(email))
+        self._log.info("Logging in {}...".format(email))
 
     async def on2FACode(self):
         """Called when a 2FA code is needed to progress"""
@@ -3197,11 +3192,11 @@ class Client(object):
 
         :param email: The email of the client
         """
-        log.info("Login of {} successful.".format(email))
+        self._log.info("Login of {} successful.".format(email))
 
     async def onListening(self):
         """Called when the client is listening"""
-        log.info("Listening...")
+        self._log.info("Listening...")
 
     async def onListenError(self, exception=None):
         """
@@ -3210,7 +3205,7 @@ class Client(object):
         :param exception: The exception that was encountered
         :return: Whether the loop should keep running
         """
-        log.exception("Got exception while listening")
+        self._log.exception("Got exception while listening")
         return True
 
     async def onMessage(
@@ -3240,7 +3235,7 @@ class Client(object):
         :type message_object: models.Message
         :type thread_type: models.ThreadType
         """
-        log.info("{} from {} in {}".format(message_object, thread_id, thread_type.name))
+        self._log.info("{} from {} in {}".format(message_object, thread_id, thread_type.name))
 
     async def onColorChange(
         self,
@@ -3267,7 +3262,7 @@ class Client(object):
         :type new_color: models.ThreadColor
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Color change from {} in {} ({}): {}".format(
                 author_id, thread_id, thread_type.name, new_color
             )
@@ -3297,7 +3292,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Emoji change from {} in {} ({}): {}".format(
                 author_id, thread_id, thread_type.name, new_emoji
             )
@@ -3327,7 +3322,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Title change from {} in {} ({}): {}".format(
                 author_id, thread_id, thread_type.name, new_title
             )
@@ -3355,7 +3350,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info("{} changed thread image in {}".format(author_id, thread_id))
+        self._log.info("{} changed thread image in {}".format(author_id, thread_id))
 
     async def onNicknameChange(
         self,
@@ -3383,7 +3378,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Nickname change from {} in {} ({}) for {}: {}".format(
                 author_id, thread_id, thread_type.name, changed_for, new_nickname
             )
@@ -3409,7 +3404,7 @@ class Client(object):
         :param ts: A timestamp of the action
         :param msg: A full set of the data recieved
         """
-        log.info("{} added admin: {} in {}".format(author_id, added_id, thread_id))
+        self._log.info("{} added admin: {} in {}".format(author_id, added_id, thread_id))
 
     async def onAdminRemoved(
         self,
@@ -3431,7 +3426,7 @@ class Client(object):
         :param ts: A timestamp of the action
         :param msg: A full set of the data recieved
         """
-        log.info("{} removed admin: {} in {}".format(author_id, removed_id, thread_id))
+        self._log.info("{} removed admin: {} in {}".format(author_id, removed_id, thread_id))
 
     async def onApprovalModeChange(
         self,
@@ -3454,9 +3449,9 @@ class Client(object):
         :param msg: A full set of the data recieved
         """
         if approval_mode:
-            log.info("{} activated approval mode in {}".format(author_id, thread_id))
+            self._log.info("{} activated approval mode in {}".format(author_id, thread_id))
         else:
-            log.info("{} disabled approval mode in {}".format(author_id, thread_id))
+            self._log.info("{} disabled approval mode in {}".format(author_id, thread_id))
 
     async def onMessageSeen(
         self,
@@ -3480,7 +3475,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Messages seen by {} in {} ({}) at {}s".format(
                 seen_by, thread_id, thread_type.name, seen_ts / 1000
             )
@@ -3508,7 +3503,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Messages {} delivered to {} in {} ({}) at {}s".format(
                 msg_ids, delivered_for, thread_id, thread_type.name, ts / 1000
             )
@@ -3528,7 +3523,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Marked messages as seen in threads {} at {}s".format(
                 [(x[0], x[1].name) for x in threads], seen_ts / 1000
             )
@@ -3554,7 +3549,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} unsent the message {} in {} ({}) at {}s".format(
                 author_id, repr(mid), thread_id, thread_type.name, ts / 1000
             )
@@ -3579,7 +3574,7 @@ class Client(object):
         :param ts: A timestamp of the action
         :param msg: A full set of the data recieved
         """
-        log.info(
+        self._log.info(
             "{} added: {} in {}".format(author_id, ", ".join(added_ids), thread_id)
         )
 
@@ -3602,7 +3597,7 @@ class Client(object):
         :param ts: A timestamp of the action
         :param msg: A full set of the data recieved
         """
-        log.info("{} removed: {} in {}".format(author_id, removed_id, thread_id))
+        self._log.info("{} removed: {} in {}".format(author_id, removed_id, thread_id))
 
     async def onFriendRequest(self, from_id=None, msg=None):
         """
@@ -3611,7 +3606,7 @@ class Client(object):
         :param from_id: The ID of the person that sent the request
         :param msg: A full set of the data recieved
         """
-        log.info("Friend request from {}".format(from_id))
+        self._log.info("Friend request from {}".format(from_id))
 
     async def onInbox(self, unseen=None, unread=None, recent_unread=None, msg=None):
         """
@@ -3623,7 +3618,7 @@ class Client(object):
         :param recent_unread: --
         :param msg: A full set of the data recieved
         """
-        log.info("Inbox event: {}, {}, {}".format(unseen, unread, recent_unread))
+        self._log.info("Inbox event: {}, {}, {}".format(unseen, unread, recent_unread))
 
     async def onTyping(
         self, author_id=None, status=None, thread_id=None, thread_type=None, msg=None
@@ -3671,7 +3666,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             '{} played "{}" in {} ({})'.format(
                 author_id, game_name, thread_id, thread_type.name
             )
@@ -3701,7 +3696,7 @@ class Client(object):
         :type reaction: models.MessageReaction
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} reacted to message {} with {} in {} ({})".format(
                 author_id, mid, reaction.name, thread_id, thread_type.name
             )
@@ -3727,7 +3722,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} removed reaction from {} message in {} ({})".format(
                 author_id, mid, thread_id, thread_type
             )
@@ -3746,7 +3741,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} blocked {} ({}) thread".format(author_id, thread_id, thread_type.name)
         )
 
@@ -3763,7 +3758,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} unblocked {} ({}) thread".format(author_id, thread_id, thread_type.name)
         )
 
@@ -3790,7 +3785,7 @@ class Client(object):
         :type location: models.LiveLocationAttachment
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} sent live location info in {} ({}) with latitude {} and longitude {}".format(
                 author_id, thread_id, thread_type, location.latitude, location.longitude
             )
@@ -3823,7 +3818,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} started call in {} ({})".format(caller_id, thread_id, thread_type.name)
         )
 
@@ -3856,7 +3851,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} ended call in {} ({})".format(caller_id, thread_id, thread_type.name)
         )
 
@@ -3884,7 +3879,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} joined call in {} ({})".format(joined_id, thread_id, thread_type.name)
         )
 
@@ -3913,7 +3908,7 @@ class Client(object):
         :type poll: models.Poll
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} created poll {} in {} ({})".format(
                 author_id, poll, thread_id, thread_type.name
             )
@@ -3946,7 +3941,7 @@ class Client(object):
         :type poll: models.Poll
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} voted in poll {} in {} ({})".format(
                 author_id, poll, thread_id, thread_type.name
             )
@@ -3977,7 +3972,7 @@ class Client(object):
         :type plan: models.Plan
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} created plan {} in {} ({})".format(
                 author_id, plan, thread_id, thread_type.name
             )
@@ -4006,7 +4001,7 @@ class Client(object):
         :type plan: models.Plan
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "Plan {} has ended in {} ({})".format(plan, thread_id, thread_type.name)
         )
 
@@ -4035,7 +4030,7 @@ class Client(object):
         :type plan: models.Plan
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} edited plan {} in {} ({})".format(
                 author_id, plan, thread_id, thread_type.name
             )
@@ -4066,7 +4061,7 @@ class Client(object):
         :type plan: models.Plan
         :type thread_type: models.ThreadType
         """
-        log.info(
+        self._log.info(
             "{} deleted plan {} in {} ({})".format(
                 author_id, plan, thread_id, thread_type.name
             )
@@ -4101,13 +4096,13 @@ class Client(object):
         :type thread_type: models.ThreadType
         """
         if take_part:
-            log.info(
+            self._log.info(
                 "{} will take part in {} in {} ({})".format(
                     author_id, plan, thread_id, thread_type.name
                 )
             )
         else:
-            log.info(
+            self._log.info(
                 "{} won't take part in {} in {} ({})".format(
                     author_id, plan, thread_id, thread_type.name
                 )
@@ -4129,7 +4124,7 @@ class Client(object):
         :param buddylist: A list of dicts with friend id and last seen timestamp
         :param msg: A full set of the data recieved
         """
-        log.debug("Chat Timestamps received: {}".format(buddylist))
+        self._log.debug("Chat Timestamps received: {}".format(buddylist))
 
     async def onBuddylistOverlay(self, statuses=None, msg=None):
         """
@@ -4139,7 +4134,7 @@ class Client(object):
         :param msg: A full set of the data recieved
         :type statuses: dict
         """
-        log.debug("Buddylist overlay received: {}".format(statuses))
+        self._log.debug("Buddylist overlay received: {}".format(statuses))
 
     async def onUnknownMesssageType(self, msg=None):
         """
@@ -4147,7 +4142,7 @@ class Client(object):
 
         :param msg: A full set of the data recieved
         """
-        log.debug("Unknown message received: {}".format(msg))
+        self._log.debug("Unknown message received: {}".format(msg))
 
     async def onMessageError(self, exception=None, msg=None):
         """
@@ -4156,7 +4151,7 @@ class Client(object):
         :param exception: The exception that was encountered
         :param msg: A full set of the data recieved
         """
-        log.exception("Exception in parsing of {}".format(msg))
+        self._log.exception("Exception in parsing of {}".format(msg))
 
     """
     END EVENTS
