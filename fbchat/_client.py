@@ -140,7 +140,8 @@ class Client(object):
         error_retries=3,
     ) -> Union[aiohttp.ClientResponse, Dict]:
         payload = self._generatePayload(query)
-        reqlog.debug(f"GET {url}")
+
+        reqlog.debug(f"GET {url}?{URL().with_query(payload).query_string}")
         r = await self._session.get(
             url,
             headers=self._header,
@@ -175,7 +176,7 @@ class Client(object):
         error_retries=3,
     ):
         payload = self._generatePayload(query)
-        reqlog.debug(f"POST {url}")
+        reqlog.debug(f"POST {url} {payload}")
         r = await self._session.post(
             url,
             headers=self._header,
@@ -217,7 +218,7 @@ class Client(object):
 
     async def _cleanPost(self, url, query=None, timeout=30) -> aiohttp.ClientResponse:
         self._req_counter += 1
-        reqlog.debug(f"POST {url}")
+        reqlog.debug(f"POST {url} {query}")
         return await self._session.post(
             url,
             headers=self._header,
@@ -988,7 +989,7 @@ class Client(object):
         ]
         pages_and_users = {}
         if len(pages_and_user_ids) != 0:
-            pages_and_users = self._fetchInfo(*pages_and_user_ids)
+            pages_and_users = await self._fetchInfo(*pages_and_user_ids)
 
         rtn = {}
         for i, entry in enumerate(j):
@@ -2534,7 +2535,7 @@ class Client(object):
                 await self.onUnknownMesssageType(msg=m)
             else:
                 thread_id = str(delta["threadKey"]["threadFbId"])
-                fetch_info = self._forcedFetch(thread_id, mid)
+                fetch_info = await self._forcedFetch(thread_id, mid)
                 fetch_data = fetch_info["message"]
                 author_id = fetch_data["message_sender"]["id"]
                 ts = fetch_data["timestamp_precise"]
@@ -2979,24 +2980,24 @@ class Client(object):
         else:
             await self.onUnknownMesssageType(msg=m)
 
-    async def _tryParseMessage(self, m) -> None:
+    async def _tryParseMessage(self, content) -> None:
         try:
-            await self._parseMessage(m)
+            self._seq = content.get("seq", "0")
+
+            if "lb_info" in content:
+                self._sticky = content["lb_info"]["sticky"]
+                self._pool = content["lb_info"]["pool"]
+
+            if "batches" in content:
+                for batch in content["batches"]:
+                    await self._tryParseMessage(batch)
+
+            asyncio.ensure_future(self._parseMessage(content), loop=self.loop)
         except Exception:
             log.exception("Error in parseMessage")
 
     async def _parseMessage(self, content):
         """Get message and author name from content. May contain multiple messages in the content."""
-        self._seq = content.get("seq", "0")
-
-        if "lb_info" in content:
-            self._sticky = content["lb_info"]["sticky"]
-            self._pool = content["lb_info"]["pool"]
-
-        if "batches" in content:
-            for batch in content["batches"]:
-                await self._parseMessage(batch)
-
         if "ms" not in content:
             return
 
@@ -3108,7 +3109,7 @@ class Client(object):
             log.debug("Pulling messages...")
             content = await self._pullMessage()
             if content:
-                asyncio.ensure_future(self._tryParseMessage(content), loop=self.loop)
+                await self._tryParseMessage(content)
         except aiohttp.ServerTimeoutError:
             pass
         except aiohttp.ClientConnectionError:
