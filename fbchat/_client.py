@@ -3106,9 +3106,7 @@ class Client(object):
             self._markAlive = markAlive
         try:
             if self._markAlive and self._sticky and self._pool:
-                log.debug("Pinging...")
                 await self._ping()
-            log.debug("Pulling messages...")
             content = await self._pullMessage()
             if content:
                 await self._tryParseMessage(content)
