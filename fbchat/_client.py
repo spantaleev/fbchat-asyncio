@@ -450,7 +450,10 @@ class Client(object):
         :return: A dictionay containing session cookies
         :rtype: dict
         """
-        return self._session.cookie_jar._cookies["facebook.com"]
+        try:
+            return self._session.cookie_jar._cookies["facebook.com"]
+        except (AttributeError, KeyError):
+            return None
 
     async def setSession(self, session_cookies):
         """Loads session cookies
