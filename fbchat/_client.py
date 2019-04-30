@@ -67,6 +67,7 @@ class Client(object):
         self._log = logging.getLogger("fbchat.client")
         self._util_log = logging.getLogger("fbchat.util")
         self._req_log = logging.getLogger("fbchat.request")
+        self._uid = None
 
         if not user_agent:
             user_agent = choice(USER_AGENTS)
