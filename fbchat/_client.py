@@ -238,10 +238,10 @@ class Client(object):
         )
         if files:
             payload = aiohttp.FormData()
-            for key, value in self._generatePayload(query):
-                payload.add_field(key, value)
-            for name, file in files:
-                payload.add_field(name, file, filename=name)
+            for key, value in self._generatePayload(query).items():
+                payload.add_field(key, str(value))
+            for key, (name, file, content_type) in files.items():
+                payload.add_field(key, file, filename=name, content_type=content_type)
         else:
             payload = self._generatePayload(query)
         r = await self._session.post(
@@ -249,8 +249,7 @@ class Client(object):
             headers=headers,
             data=payload,
             timeout=timeout,
-            files=files,
-            verify=self.ssl_verify,
+            verify_ssl=self.ssl_verify,
         )
         if not fix_request:
             return r
