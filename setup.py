@@ -20,13 +20,13 @@ setuptools.setup(
 
     install_requires=[
         "aenum",
-        "attrs~=18.2.0",
+        "attrs",
         "beautifulsoup4",
         "aiohttp",
         "yarl",
     ],
 
-    python_requires="~=3.5",
+    python_requires="~=3.6",
 
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -39,7 +39,6 @@ setuptools.setup(
         "Framework :: AsyncIO",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Topic :: Communications :: Chat",

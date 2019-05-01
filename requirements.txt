@@ -1,5 +1,5 @@
 aenum
-attrs~=18.2.0
+attrs
 beautifulsoup4
 aiohttp
 yarl
