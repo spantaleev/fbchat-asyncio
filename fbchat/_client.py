@@ -504,7 +504,8 @@ class Client(object):
                         i, {True: ", retrying"}.get(i < max_tries, "")
                     )
                 )
-                time.sleep(1)
+                if i < max_tries:
+                    time.sleep(1)
                 continue
             else:
                 await self.onLoggedIn(email=email)
