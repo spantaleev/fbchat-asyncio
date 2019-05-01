@@ -2968,7 +2968,12 @@ class Client(object):
                 author_id=author_id,
                 message=delta.get("body", ""),
                 message_object=Message._from_pull(
-                    delta, tags=metadata.get("tags"), author=author_id, timestamp=ts, log=self._util_log,
+                    delta,
+                    mid=mid,
+                    tags=metadata.get("tags"),
+                    author=author_id,
+                    timestamp=ts,
+                    log = self._util_log,
                 ),
                 thread_id=thread_id,
                 thread_type=thread_type,
