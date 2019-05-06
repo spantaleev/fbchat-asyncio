@@ -3140,7 +3140,8 @@ class Client(object):
 
     def stopListening(self):
         """Cleans up the variables from startListening"""
-        self._listening.cancel()
+        if self._listening and not self._listening.done():
+            self._listening.cancel()
         self._sticky, self._pool = (None, None)
 
     def listen(self, markAlive=None):
