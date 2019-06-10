@@ -114,7 +114,7 @@ class Client(object):
         self._req_counter += 1
         return {key: value for key, value in payload.items() if value is not None}
 
-    def _fix_fb_errors(self, error_code):
+    async def _fix_fb_errors(self, error_code):
         """
         This fixes "Please try closing and re-opening your browser window" errors (1357004)
         This error usually happens after 1-2 days of inactivity
@@ -122,7 +122,8 @@ class Client(object):
         """
         if error_code == "1357004":
             self._log.warning("Got error #1357004. Doing a _postLogin, and resending request")
-            self._postLogin()
+            await self._postLogin()
+            await asyncio.sleep(1)
             return True
         return False
 
@@ -150,7 +151,7 @@ class Client(object):
         try:
             return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
-            if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
+            if error_retries > 0 and await self._fix_fb_errors(e.fb_error_code):
                 return await self._get(
                     url,
                     query=query,
@@ -189,7 +190,7 @@ class Client(object):
             else:
                 return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
-            if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
+            if error_retries > 0 and await self._fix_fb_errors(e.fb_error_code):
                 return await self._post(
                     url,
                     query=query,
@@ -257,7 +258,7 @@ class Client(object):
         try:
             return await check_request(r, as_json=as_json, log=self._util_log)
         except FBchatFacebookError as e:
-            if error_retries > 0 and self._fix_fb_errors(e.fb_error_code):
+            if error_retries > 0 and await self._fix_fb_errors(e.fb_error_code):
                 return await self._postFile(
                     url,
                     files=files,
